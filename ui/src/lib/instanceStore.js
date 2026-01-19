@@ -655,6 +655,10 @@ export const instanceActions = {
 
 // Watch folder event listener (Tauri only)
 if (isTauri && typeof window !== 'undefined') {
+  // Delay before auto-starting torrents from watch folder
+  // This gives the UI time to update and prevents race conditions
+  const WATCH_FOLDER_AUTO_START_DELAY_MS = 1000;
+
   (async () => {
     try {
       const { listen } = await import('@tauri-apps/api/event');
@@ -680,7 +684,7 @@ if (isTauri && typeof window !== 'undefined') {
             return [...current, inst];
           });
           
-          // Auto-start if enabled
+          // Auto-start if enabled (with delay to ensure UI is ready)
           if (auto_start) {
             setTimeout(async () => {
               try {
@@ -688,7 +692,7 @@ if (isTauri && typeof window !== 'undefined') {
               } catch (err) {
                 console.error('Failed to auto-start watch folder torrent:', err);
               }
-            }, 1000);
+            }, WATCH_FOLDER_AUTO_START_DELAY_MS);
           }
           
           console.log('Watch folder torrent loaded:', torrent.name);

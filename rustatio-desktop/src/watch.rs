@@ -11,6 +11,9 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
 
+/// Delay in milliseconds after file detection to ensure file is fully written
+const FILE_WRITE_DELAY_MS: u64 = 500;
+
 /// Event emitted when a new torrent is detected in watch folder
 #[derive(Clone, Serialize)]
 pub struct WatchFolderTorrentEvent {
@@ -176,7 +179,7 @@ async fn run_watcher(
                     for path in event.paths {
                         if is_torrent_file(&path) {
                             // Small delay to ensure file is fully written
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(FILE_WRITE_DELAY_MS)).await;
 
                             // Read and process the torrent
                             match std::fs::read(&path) {
