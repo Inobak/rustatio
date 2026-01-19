@@ -652,3 +652,55 @@ export const instanceActions = {
     return true;
   },
 };
+
+// Watch folder event listener (Tauri only)
+if (isTauri && typeof window !== 'undefined') {
+  (async () => {
+    try {
+      const { listen } = await import('@tauri-apps/api/event');
+      
+      // Listen for watch folder torrent events
+      await listen('watch-folder-torrent', async (event) => {
+        const { torrent, auto_start } = event.payload;
+        
+        console.log('Watch folder event received:', torrent.name);
+        
+        try {
+          // Create a new instance
+          const instanceId = await api.createInstance();
+          
+          // Add to instances
+          instances.update(current => {
+            const inst = createDefaultInstance(instanceId, {
+              source: 'watch_folder',
+            });
+            inst.torrent = torrent;
+            inst.statusMessage = 'Torrent loaded from watch folder';
+            inst.statusType = 'info';
+            return [...current, inst];
+          });
+          
+          // Auto-start if enabled
+          if (auto_start) {
+            setTimeout(async () => {
+              try {
+                await instanceActions.startFaker(instanceId);
+              } catch (err) {
+                console.error('Failed to auto-start watch folder torrent:', err);
+              }
+            }, 1000);
+          }
+          
+          console.log('Watch folder torrent loaded:', torrent.name);
+        } catch (err) {
+          console.error('Failed to load watch folder torrent:', err);
+        }
+      });
+      
+      console.log('Watch folder event listener registered');
+    } catch (err) {
+      console.warn('Failed to register watch folder listener:', err);
+    }
+  })();
+}
+

@@ -32,50 +32,75 @@
     localStorage.setItem(LOG_LEVEL_KEY, level);
   }
 
-  // Global speed limits state (stored in localStorage for now)
-  const GLOBAL_SPEED_LIMITS_KEY = 'rustatio-global-speed-limits';
-  
-  function loadGlobalSpeedLimits() {
+  // Global speed limits and watch folder - load from backend config if Tauri
+  let globalSpeedLimits = $state({ enabled: false, uploadLimit: 0, downloadLimit: 0 });
+  let watchFolderSettings = $state({ enabled: false, path: '', autoStart: false });
+
+  // Load settings from backend on mount (Tauri only)
+  $effect(() => {
+    if (isTauri && isOpen) {
+      loadBackendSettings();
+    }
+  });
+
+  async function loadBackendSettings() {
     try {
-      const stored = localStorage.getItem(GLOBAL_SPEED_LIMITS_KEY);
-      return stored ? JSON.parse(stored) : {
-        enabled: false,
-        uploadLimit: 0,
-        downloadLimit: 0
+      const config = await api.getConfig();
+      
+      // Load global speed limits
+      globalSpeedLimits = {
+        enabled: config.faker?.global_speed_limit_enabled || false,
+        uploadLimit: config.faker?.global_upload_limit || 0,
+        downloadLimit: config.faker?.global_download_limit || 0
       };
-    } catch {
-      return { enabled: false, uploadLimit: 0, downloadLimit: 0 };
+      
+      // Load watch folder settings
+      watchFolderSettings = {
+        enabled: config.ui?.watch_folder_enabled || false,
+        path: config.ui?.watch_folder_path || '',
+        autoStart: config.ui?.watch_folder_auto_start || false
+      };
+    } catch (err) {
+      console.error('Failed to load backend settings:', err);
     }
   }
 
-  let globalSpeedLimits = $state(loadGlobalSpeedLimits());
-
-  function saveGlobalSpeedLimits(limits) {
+  async function saveGlobalSpeedLimits(limits) {
     globalSpeedLimits = limits;
-    localStorage.setItem(GLOBAL_SPEED_LIMITS_KEY, JSON.stringify(limits));
-  }
-
-  // Watch folder settings (desktop mode only, stored in localStorage for now)
-  const WATCH_FOLDER_KEY = 'rustatio-watch-folder';
-  
-  function loadWatchFolderSettings() {
-    try {
-      const stored = localStorage.getItem(WATCH_FOLDER_KEY);
-      return stored ? JSON.parse(stored) : {
-        enabled: false,
-        path: '',
-        autoStart: false
-      };
-    } catch {
-      return { enabled: false, path: '', autoStart: false };
+    
+    if (isTauri) {
+      try {
+        const config = await api.getConfig();
+        config.faker.global_speed_limit_enabled = limits.enabled;
+        config.faker.global_upload_limit = limits.uploadLimit;
+        config.faker.global_download_limit = limits.downloadLimit;
+        await api.updateConfig(config);
+      } catch (err) {
+        console.error('Failed to save global speed limits:', err);
+      }
+    } else {
+      // Fallback to localStorage for web mode
+      localStorage.setItem('rustatio-global-speed-limits', JSON.stringify(limits));
     }
   }
 
-  let watchFolderSettings = $state(loadWatchFolderSettings());
-
-  function saveWatchFolderSettings(settings) {
+  async function saveWatchFolderSettings(settings) {
     watchFolderSettings = settings;
-    localStorage.setItem(WATCH_FOLDER_KEY, JSON.stringify(settings));
+    
+    if (isTauri) {
+      try {
+        const config = await api.getConfig();
+        config.ui.watch_folder_enabled = settings.enabled;
+        config.ui.watch_folder_path = settings.path;
+        config.ui.watch_folder_auto_start = settings.autoStart;
+        await api.updateConfig(config);
+      } catch (err) {
+        console.error('Failed to save watch folder settings:', err);
+      }
+    } else {
+      // Fallback to localStorage for web mode
+      localStorage.setItem('rustatio-watch-folder', JSON.stringify(settings));
+    }
   }
 
   async function selectWatchFolder() {
@@ -89,7 +114,7 @@
         });
         
         if (selected) {
-          saveWatchFolderSettings({
+          await saveWatchFolderSettings({
             ...watchFolderSettings,
             path: selected
           });
