@@ -4,11 +4,19 @@
 
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rustatio_core::{FakerConfig, TorrentInfo};
+use serde::Serialize;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, RwLock};
+
+/// Event emitted when a new torrent is detected in watch folder
+#[derive(Clone, Serialize)]
+pub struct WatchFolderTorrentEvent {
+    pub torrent: TorrentInfo,
+    pub auto_start: bool,
+}
 
 /// Watch folder configuration
 #[derive(Debug, Clone)]
@@ -114,12 +122,6 @@ impl WatchService {
         }
 
         // Emit event to frontend to create instance with this torrent
-        #[derive(Clone, serde::Serialize)]
-        struct WatchFolderTorrentEvent {
-            torrent: TorrentInfo,
-            auto_start: bool,
-        }
-
         let _ = self.app_handle.emit("watch-folder-torrent", WatchFolderTorrentEvent {
             torrent,
             auto_start: self.config.auto_start,
@@ -191,12 +193,6 @@ async fn run_watcher(
 
                                             if !already_loaded {
                                                 // Emit event to frontend
-                                                #[derive(Clone, serde::Serialize)]
-                                                struct WatchFolderTorrentEvent {
-                                                    torrent: TorrentInfo,
-                                                    auto_start: bool,
-                                                }
-
                                                 let _ = app_handle.emit("watch-folder-torrent", WatchFolderTorrentEvent {
                                                     torrent,
                                                     auto_start,

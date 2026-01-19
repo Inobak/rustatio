@@ -71,10 +71,12 @@
     if (isTauri) {
       try {
         const config = await api.getConfig();
-        config.faker.global_speed_limit_enabled = limits.enabled;
-        config.faker.global_upload_limit = limits.uploadLimit;
-        config.faker.global_download_limit = limits.downloadLimit;
-        await api.updateConfig(config);
+        if (config.faker) {
+          config.faker.global_speed_limit_enabled = limits.enabled;
+          config.faker.global_upload_limit = limits.uploadLimit;
+          config.faker.global_download_limit = limits.downloadLimit;
+          await api.updateConfig(config);
+        }
       } catch (err) {
         console.error('Failed to save global speed limits:', err);
       }
@@ -90,10 +92,12 @@
     if (isTauri) {
       try {
         const config = await api.getConfig();
-        config.ui.watch_folder_enabled = settings.enabled;
-        config.ui.watch_folder_path = settings.path;
-        config.ui.watch_folder_auto_start = settings.autoStart;
-        await api.updateConfig(config);
+        if (config.ui) {
+          config.ui.watch_folder_enabled = settings.enabled;
+          config.ui.watch_folder_path = settings.path;
+          config.ui.watch_folder_auto_start = settings.autoStart;
+          await api.updateConfig(config);
+        }
       } catch (err) {
         console.error('Failed to save watch folder settings:', err);
       }
