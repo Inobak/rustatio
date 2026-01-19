@@ -3801,6 +3801,7 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "log",
+ "notify",
  "rustatio-core",
  "serde",
  "serde_json",
