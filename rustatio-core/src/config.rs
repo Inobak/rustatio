@@ -98,6 +98,18 @@ pub struct FakerSettings {
     /// Auto-update stats interval in seconds
     #[serde(default = "default_update_interval")]
     pub update_interval: u64,
+
+    /// Enable global speed limits
+    #[serde(default)]
+    pub global_speed_limit_enabled: bool,
+
+    /// Global upload limit in KB/s (applies across all instances)
+    #[serde(default)]
+    pub global_upload_limit: f64,
+
+    /// Global download limit in KB/s (applies across all instances)
+    #[serde(default)]
+    pub global_download_limit: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +129,18 @@ pub struct UiSettings {
     /// Show application logs
     #[serde(default = "default_show_logs")]
     pub show_logs: bool,
+
+    /// Enable folder monitoring (desktop mode only)
+    #[serde(default)]
+    pub watch_folder_enabled: bool,
+
+    /// Path to watch for .torrent files (desktop mode only)
+    #[serde(default)]
+    pub watch_folder_path: Option<String>,
+
+    /// Auto-start torrents added from watch folder
+    #[serde(default)]
+    pub watch_folder_auto_start: bool,
 }
 
 // Default values
@@ -182,6 +206,9 @@ impl Default for FakerSettings {
             default_download_rate: default_download_rate(),
             default_announce_interval: default_announce_interval(),
             update_interval: default_update_interval(),
+            global_speed_limit_enabled: false,
+            global_upload_limit: 0.0,
+            global_download_limit: 0.0,
         }
     }
 }
@@ -193,6 +220,9 @@ impl Default for UiSettings {
             window_height: default_window_height(),
             dark_mode: default_dark_mode(),
             show_logs: default_show_logs(),
+            watch_folder_enabled: false,
+            watch_folder_path: None,
+            watch_folder_auto_start: false,
         }
     }
 }

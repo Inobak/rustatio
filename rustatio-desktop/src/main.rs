@@ -1,12 +1,16 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+mod watch;
+
 use rustatio_core::validation;
 use rustatio_core::{AppConfig, FakerConfig, FakerState, FakerStats, RatioFaker, TorrentInfo};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::RwLock;
+use watch::{WatchConfig, WatchService};
 
 // Log event payload
 #[derive(Clone, Serialize)]
@@ -110,6 +114,7 @@ struct AppState {
     fakers: Arc<RwLock<HashMap<u32, FakerInstance>>>,
     next_instance_id: Arc<RwLock<u32>>,
     config: Arc<RwLock<AppConfig>>,
+    watch_service: Arc<RwLock<Option<WatchService>>>,
 }
 
 // Tauri command: Create a new instance
@@ -517,6 +522,7 @@ fn main() {
         fakers: Arc::new(RwLock::new(HashMap::new())),
         next_instance_id: Arc::new(RwLock::new(1)),
         config: Arc::new(RwLock::new(config)),
+        watch_service: Arc::new(RwLock::new(None)),
     };
 
     tauri::Builder::default()
@@ -547,6 +553,36 @@ fn main() {
         .setup(|app| {
             // Initialize the logger with app handle
             rustatio_core::logger::init_logger(app.handle().clone());
+            
+            // Start watch folder service if enabled in config
+            let app_handle = app.handle().clone();
+            let state = app.state::<AppState>();
+            let config = state.config.clone();
+            
+            tauri::async_runtime::spawn(async move {
+                let cfg = config.read().await;
+                if cfg.ui.watch_folder_enabled {
+                    if let Some(path_str) = &cfg.ui.watch_folder_path {
+                        let watch_config = WatchConfig {
+                            enabled: true,
+                            path: PathBuf::from(path_str),
+                            auto_start: cfg.ui.watch_folder_auto_start,
+                        };
+                        
+                        let mut watch_service = WatchService::new(watch_config, app_handle.clone());
+                        match watch_service.start().await {
+                            Ok(_) => {
+                                log::info!("Watch folder service started successfully");
+                                *state.watch_service.write().await = Some(watch_service);
+                            }
+                            Err(e) => {
+                                log::error!("Failed to start watch folder service: {}", e);
+                            }
+                        }
+                    }
+                }
+            });
+            
             Ok(())
         })
         .run(tauri::generate_context!())
