@@ -4,8 +4,9 @@
   import Button from '$lib/components/ui/button.svelte';
   import { builtInPresets } from '$lib/presets/index.js';
   import { THEMES, THEME_CATEGORIES, getTheme, selectTheme } from '../lib/themeStore.svelte.js';
-  import { Settings, X, Check, Trash2, Download, Upload } from '@lucide/svelte';
+  import { Settings, X, Check, Trash2, Download, Upload, FolderOpen, Gauge } from '@lucide/svelte';
   import PresetIcon from './PresetIcon.svelte';
+  import { api } from '../lib/api.js';
 
   let { isOpen = $bindable(false) } = $props();
 
@@ -29,6 +30,74 @@
   function saveLogLevel(level) {
     logLevel = level;
     localStorage.setItem(LOG_LEVEL_KEY, level);
+  }
+
+  // Global speed limits state (stored in localStorage for now)
+  const GLOBAL_SPEED_LIMITS_KEY = 'rustatio-global-speed-limits';
+  
+  function loadGlobalSpeedLimits() {
+    try {
+      const stored = localStorage.getItem(GLOBAL_SPEED_LIMITS_KEY);
+      return stored ? JSON.parse(stored) : {
+        enabled: false,
+        uploadLimit: 0,
+        downloadLimit: 0
+      };
+    } catch {
+      return { enabled: false, uploadLimit: 0, downloadLimit: 0 };
+    }
+  }
+
+  let globalSpeedLimits = $state(loadGlobalSpeedLimits());
+
+  function saveGlobalSpeedLimits(limits) {
+    globalSpeedLimits = limits;
+    localStorage.setItem(GLOBAL_SPEED_LIMITS_KEY, JSON.stringify(limits));
+  }
+
+  // Watch folder settings (desktop mode only, stored in localStorage for now)
+  const WATCH_FOLDER_KEY = 'rustatio-watch-folder';
+  
+  function loadWatchFolderSettings() {
+    try {
+      const stored = localStorage.getItem(WATCH_FOLDER_KEY);
+      return stored ? JSON.parse(stored) : {
+        enabled: false,
+        path: '',
+        autoStart: false
+      };
+    } catch {
+      return { enabled: false, path: '', autoStart: false };
+    }
+  }
+
+  let watchFolderSettings = $state(loadWatchFolderSettings());
+
+  function saveWatchFolderSettings(settings) {
+    watchFolderSettings = settings;
+    localStorage.setItem(WATCH_FOLDER_KEY, JSON.stringify(settings));
+  }
+
+  async function selectWatchFolder() {
+    if (isTauri) {
+      try {
+        const { open } = await import('@tauri-apps/plugin-dialog');
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: 'Select Watch Folder'
+        });
+        
+        if (selected) {
+          saveWatchFolderSettings({
+            ...watchFolderSettings,
+            path: selected
+          });
+        }
+      } catch (err) {
+        console.error('Failed to select folder:', err);
+      }
+    }
   }
 
   // Custom presets stored in localStorage
@@ -501,6 +570,151 @@
                 {THEMES[getTheme()]?.description || ''}
               </p>
             </div>
+
+            <!-- Global Speed Limits Section -->
+            <div class="border border-border rounded-lg p-4">
+              <div class="flex items-start justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <Gauge size={18} class="text-primary" />
+                  <h3 class="font-semibold text-foreground">Global Speed Limits</h3>
+                </div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={globalSpeedLimits.enabled}
+                    onchange={e => saveGlobalSpeedLimits({ 
+                      ...globalSpeedLimits, 
+                      enabled: e.target.checked 
+                    })}
+                    class="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/50"
+                  />
+                  <span class="text-sm text-muted-foreground">Enabled</span>
+                </label>
+              </div>
+              <p class="text-sm text-muted-foreground mb-4">
+                Set global speed limits that apply across all instances. Individual instance rates will be proportionally adjusted to stay within these limits.
+              </p>
+              
+              <div class="space-y-3 {!globalSpeedLimits.enabled && 'opacity-50 pointer-events-none'}">
+                <div class="flex items-center gap-4">
+                  <label for="globalUploadLimit" class="text-sm font-medium min-w-[100px]">Upload Limit</label>
+                  <div class="flex items-center gap-2 flex-1">
+                    <input
+                      id="globalUploadLimit"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={globalSpeedLimits.uploadLimit}
+                      oninput={e => saveGlobalSpeedLimits({ 
+                        ...globalSpeedLimits, 
+                        uploadLimit: parseFloat(e.target.value) || 0 
+                      })}
+                      class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      placeholder="0 = unlimited"
+                      disabled={!globalSpeedLimits.enabled}
+                    />
+                    <span class="text-sm text-muted-foreground">KB/s</span>
+                  </div>
+                </div>
+                
+                <div class="flex items-center gap-4">
+                  <label for="globalDownloadLimit" class="text-sm font-medium min-w-[100px]">Download Limit</label>
+                  <div class="flex items-center gap-2 flex-1">
+                    <input
+                      id="globalDownloadLimit"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={globalSpeedLimits.downloadLimit}
+                      oninput={e => saveGlobalSpeedLimits({ 
+                        ...globalSpeedLimits, 
+                        downloadLimit: parseFloat(e.target.value) || 0 
+                      })}
+                      class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      placeholder="0 = unlimited"
+                      disabled={!globalSpeedLimits.enabled}
+                    />
+                    <span class="text-sm text-muted-foreground">KB/s</span>
+                  </div>
+                </div>
+              </div>
+              
+              <p class="mt-3 text-xs text-muted-foreground italic">
+                Note: Set to 0 for unlimited. When enabled, all instances' speeds will be capped so the total doesn't exceed these limits.
+              </p>
+            </div>
+
+            <!-- Watch Folder Section (Desktop mode only) -->
+            {#if isTauri}
+              <div class="border border-border rounded-lg p-4">
+                <div class="flex items-start justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <FolderOpen size={18} class="text-primary" />
+                    <h3 class="font-semibold text-foreground">Watch Folder</h3>
+                  </div>
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={watchFolderSettings.enabled}
+                      onchange={e => saveWatchFolderSettings({ 
+                        ...watchFolderSettings, 
+                        enabled: e.target.checked 
+                      })}
+                      class="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/50"
+                    />
+                    <span class="text-sm text-muted-foreground">Enabled</span>
+                  </label>
+                </div>
+                <p class="text-sm text-muted-foreground mb-4">
+                  Automatically monitor a folder for new .torrent files and add them to the application.
+                </p>
+                
+                <div class="space-y-3 {!watchFolderSettings.enabled && 'opacity-50 pointer-events-none'}">
+                  <div>
+                    <label for="watchFolderPath" class="block text-sm font-medium mb-2">Folder Path</label>
+                    <div class="flex items-center gap-2">
+                      <input
+                        id="watchFolderPath"
+                        type="text"
+                        value={watchFolderSettings.path}
+                        readonly
+                        placeholder="Select a folder..."
+                        class="flex-1 px-3 py-2 text-sm border border-border rounded-lg bg-muted cursor-not-allowed"
+                        disabled={!watchFolderSettings.enabled}
+                      />
+                      <Button
+                        size="sm"
+                        onclick={selectWatchFolder}
+                        disabled={!watchFolderSettings.enabled}
+                      >
+                        Browse
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-2">
+                    <input
+                      id="watchFolderAutoStart"
+                      type="checkbox"
+                      checked={watchFolderSettings.autoStart}
+                      onchange={e => saveWatchFolderSettings({ 
+                        ...watchFolderSettings, 
+                        autoStart: e.target.checked 
+                      })}
+                      class="w-4 h-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/50"
+                      disabled={!watchFolderSettings.enabled}
+                    />
+                    <label for="watchFolderAutoStart" class="text-sm text-foreground">
+                      Automatically start seeding when torrents are added
+                    </label>
+                  </div>
+                </div>
+                
+                <p class="mt-3 text-xs text-muted-foreground italic">
+                  Note: Restart the application for changes to take effect.
+                </p>
+              </div>
+            {/if}
           </div>
         {:else if activeTab === 'presets'}
           <!-- Presets Tab -->
